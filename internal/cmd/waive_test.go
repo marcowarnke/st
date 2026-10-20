@@ -55,6 +55,36 @@ func TestWaive(t *testing.T) {
 	}
 }
 
+// A failure after some waivers were created must name them, also with --json.
+func TestWaivePartialFailure(t *testing.T) {
+	f := newFake(t)
+	f.extraViolations = map[string][]any{"h2": {secViolation("Security-Medium", 5, false, "Found security vulnerability CVE-2022-38749 with severity 6.5.")}}
+	f.failWaivers = map[string]bool{"pv-Security-Medium-5": true}
+
+	out, errOut, code := run(t, "", "waive", "-A", "my-service", "org.yaml:snakeyaml", "-m", "x", "--json", "violationId", "--jq", ".[].violationId")
+	if code != 1 || out != "pv-Security-High-8\n" {
+		t.Fatalf("code=%d out=%q err=%q", code, out, errOut)
+	}
+	for _, want := range []string{"waiving Security-Medium violation of org.yaml:snakeyaml: HTTP 403", "1 of 2 waivers were created before this failure (Security-High); don't create them again"} {
+		if !strings.Contains(errOut, want) {
+			t.Errorf("missing %q in %q", want, errOut)
+		}
+	}
+
+	// Text mode: the created waiver is printed, then the same error.
+	_, errOut, _ = run(t, "", "waive", "-A", "my-service", "org.yaml:snakeyaml", "-m", "x")
+	if !strings.Contains(errOut, "Waived Security-High violation (threat 8)") || !strings.Contains(errOut, "1 of 2 waivers were created") {
+		t.Fatalf("err=%q", errOut)
+	}
+
+	// Nothing created yet: plain error, and the 403 hint still applies.
+	f.failWaivers["pv-Security-High-8"] = true
+	_, errOut, code = runCLI(t, "waive", "-A", "my-service", "org.yaml:snakeyaml", "-m", "x")
+	if code != 1 || strings.Contains(errOut, "were created") || !strings.Contains(errOut, "hint: the user lacks permission") {
+		t.Fatalf("code=%d err=%q", code, errOut)
+	}
+}
+
 func TestVulnListViolations(t *testing.T) {
 	newFake(t)
 	out, _, _ := run(t, "", "vuln", "list", "-A", "my-service", "--json", "name,violations", "--jq", ".[0].violations[0].id")

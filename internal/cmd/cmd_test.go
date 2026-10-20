@@ -26,6 +26,10 @@ type fakeIQ struct {
 	// policyDeps adds the raw report's dependency data to the policy report,
 	// as newer IQ versions do.
 	policyDeps bool
+	// extraViolations are appended to a component's violations in the policy report, by hash.
+	extraViolations map[string][]any
+	// failWaivers answers waiver requests for these violation IDs with HTTP 403.
+	failWaivers map[string]bool
 }
 
 func newFake(t *testing.T) *fakeIQ {
@@ -179,6 +183,11 @@ func (f *fakeIQ) handle(w http.ResponseWriter, r *http.Request) {
 	f.bodies[key] = string(body)
 	f.mu.Unlock()
 	if strings.HasPrefix(key, "POST /api/v2/policyWaivers/application/a1/pv-") {
+		if f.failWaivers[key[strings.LastIndex(key, "/")+1:]] {
+			w.WriteHeader(403)
+			fmt.Fprint(w, "Forbidden")
+			return
+		}
 		w.WriteHeader(204)
 		return
 	}
@@ -213,7 +222,14 @@ func (f *fakeIQ) handle(w http.ResponseWriter, r *http.Request) {
 	case "GET /api/v2/reports/applications/a2":
 		out = []any{}
 	case "GET /api/v2/applications/my-service/reports/r1/policy", "GET /api/v2/applications/my-service/reports/r2/policy":
-		out = withPolicyDeps(policyReport(), f.policyDeps)
+		p := withPolicyDeps(policyReport(), f.policyDeps)
+		for _, c := range p["components"].([]any) {
+			c := c.(map[string]any)
+			if extra := f.extraViolations[c["hash"].(string)]; extra != nil {
+				c["violations"] = append(c["violations"].([]any), extra...)
+			}
+		}
+		out = p
 	case "GET /api/v2/applications/my-service/reports/r1/raw", "GET /api/v2/applications/my-service/reports/r2/raw":
 		out = rawReport()
 	case "POST /api/v2/components/remediation/application/a1":
