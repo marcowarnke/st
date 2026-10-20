@@ -82,6 +82,14 @@ var vulnReason = regexp.MustCompile(`(?i)security vulnerability (\S+) with sever
 // loadScan joins the policy report (violations, threat levels) with the raw
 // report (CVE details, dependency data) by component hash.
 func loadScan(c *session, app *iq.Application, stage string, includeWaived bool) (*scan, error) {
+	return loadScanWith(c, app, stage, includeWaived, true)
+}
+
+// loadScanWith reads the raw report only if withRaw, or if the policy
+// report lacks dependency data for a component with security violations
+// (older IQ versions). Without it, CVE details come only from the
+// violation reasons.
+func loadScanWith(c *session, app *iq.Application, stage string, includeWaived, withRaw bool) (*scan, error) {
 	rep, err := pickReport(c, app, stage)
 	if err != nil {
 		return nil, err
@@ -90,10 +98,16 @@ func loadScan(c *session, app *iq.Application, stage string, includeWaived bool)
 	var raw []iq.RawComponent
 	var perr, rerr error
 	var wg sync.WaitGroup
-	wg.Add(2)
+	wg.Add(1)
 	go func() { defer wg.Done(); policy, perr = c.PolicyReport(app.PublicID, rep.ReportID()) }()
-	go func() { defer wg.Done(); raw, rerr = c.RawReport(app.PublicID, rep.ReportID()) }()
+	if withRaw {
+		wg.Add(1)
+		go func() { defer wg.Done(); raw, rerr = c.RawReport(app.PublicID, rep.ReportID()) }()
+	}
 	wg.Wait()
+	if perr == nil && !withRaw && missingDependencyData(policy) {
+		raw, rerr = c.RawReport(app.PublicID, rep.ReportID())
+	}
 	if perr != nil {
 		return nil, perr
 	}
@@ -203,6 +217,17 @@ func loadScan(c *session, app *iq.Application, stage string, includeWaived bool)
 		return a.Name < b.Name
 	})
 	return s, nil
+}
+
+func missingDependencyData(p *iq.PolicyReport) bool {
+	for _, pc := range p.Components {
+		for _, v := range pc.Violations {
+			if v.Security() && pc.DependencyData == nil {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func firstNonEmpty(ss ...string) string {

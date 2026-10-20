@@ -20,6 +20,9 @@ type fakeIQ struct {
 	mu       sync.Mutex
 	requests []string
 	srv      *httptest.Server
+	// policyDeps adds the raw report's dependency data to the policy report,
+	// as newer IQ versions do.
+	policyDeps bool
 }
 
 func newFake(t *testing.T) *fakeIQ {
@@ -111,6 +114,24 @@ func rawReport() map[string]any {
 	}}
 }
 
+func withPolicyDeps(p map[string]any, on bool) map[string]any {
+	if !on {
+		return p
+	}
+	deps := map[string]any{}
+	for _, c := range rawReport()["components"].([]any) {
+		c := c.(map[string]any)
+		deps[c["hash"].(string)] = c["dependencyData"]
+	}
+	for _, c := range p["components"].([]any) {
+		c := c.(map[string]any)
+		if d, ok := deps[c["hash"].(string)]; ok {
+			c["dependencyData"] = d
+		}
+	}
+	return p
+}
+
 func change(typ, purl string, id map[string]any) map[string]any {
 	return map[string]any{"type": typ, "data": map[string]any{"component": map[string]any{"packageUrl": purl, "componentIdentifier": id}}}
 }
@@ -179,7 +200,7 @@ func (f *fakeIQ) handle(w http.ResponseWriter, r *http.Request) {
 	case "GET /api/v2/reports/applications/a2":
 		out = []any{}
 	case "GET /api/v2/applications/my-service/reports/r1/policy", "GET /api/v2/applications/my-service/reports/r2/policy":
-		out = policyReport()
+		out = withPolicyDeps(policyReport(), f.policyDeps)
 	case "GET /api/v2/applications/my-service/reports/r1/raw", "GET /api/v2/applications/my-service/reports/r2/raw":
 		out = rawReport()
 	case "POST /api/v2/components/remediation/application/a1":
@@ -452,6 +473,28 @@ func TestStatus(t *testing.T) {
 	}
 	if !strings.Contains(rows[1]["error"].(string), "not been evaluated") {
 		t.Fatalf("other=%v", rows[1])
+	}
+}
+
+func TestStatusSkipsRawReport(t *testing.T) {
+	for _, policyDeps := range []bool{false, true} {
+		f := newFake(t)
+		f.policyDeps = policyDeps
+		out, errOut, code := run(t, "", "status", "--json", "application,components,direct,threatLevel")
+		if code != 0 {
+			t.Fatal(errOut)
+		}
+		if rows := decode[[]map[string]any](t, out); rows[0]["components"] != 3.0 || rows[0]["direct"] != 1.0 || rows[0]["threatLevel"] != 9.0 {
+			t.Fatalf("policyDeps=%v rows=%v", policyDeps, rows)
+		}
+		// The raw report is only needed for dependency data the policy report lacks.
+		want := 1
+		if policyDeps {
+			want = 0
+		}
+		if n := f.count("GET /api/v2/applications/my-service/reports/r1/raw"); n != want {
+			t.Fatalf("policyDeps=%v: %d raw report requests, want %d", policyDeps, n, want)
+		}
 	}
 }
 
