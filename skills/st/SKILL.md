@@ -1,0 +1,37 @@
+---
+name: st
+description: Sonatype IQ Server CLI (`st`) reference. Use for any Sonatype / IQ Server / Lifecycle question — vulnerable dependencies, CVE details, policy violations, which version fixes a component. To actually upgrade vulnerable dependencies and open a PR, use the st-upgrade skill.
+---
+
+`st` reads Sonatype IQ Server (Lifecycle): applications, their latest scan reports, security policy violations, vulnerability details and IQ's remediation (which version to upgrade to). It never changes anything on the server and never edits files. Run `st <cmd> --help` when unsure; help texts are written for agents.
+
+Auth is preconfigured. `st auth status` checks it; exit code 4 anywhere = not authenticated → stop and tell the user, never attempt login.
+
+## Conventions
+
+- Application: `-A PUBLIC_ID`, else `ST_APP`, else matched from the git remote of the current checkout (the IQ application's source control repository URL). If matching fails, find it with `st app list -S <name>` and pass `-A`.
+- Report: the build stage's latest by default, else the most recent; `--stage release` etc. to pick another. Results are only as fresh as the last scan (`st app view` shows when).
+- Prefer `--json <fields> [--jq <expr>]` for anything you parse. `--json` alone lists fields.
+- Output is plain and prompt-free when piped. Exit codes: 0 ok, 1 error, 4 auth, 9 some components have no remediation (`st fix`).
+- Components are named by package URL (`pkg:maven/g/a@1.0`), or by name: `group:artifact` for Maven, the package name elsewhere.
+
+## Commands
+
+| Need | Command |
+|---|---|
+| Which app / when scanned | `st app view [--json publicId,repositoryUrl,reports]` |
+| Find an app | `st app list -S text` |
+| Vulnerable components | `st vuln list [--min-threat 8] [--direct\|--transitive] [--cve ID] [--json name,version,purl,dependency,parents,threatLevel,cves]` |
+| Is the app affected by a CVE? | `st vuln list --cve CVE-2022-42003` |
+| What a vulnerability is | `st vuln view CVE-… [--json description,recommendation,vulnerableVersionRanges,score,kev]` |
+| Which version fixes it | `st fix [PURL\|NAME\|CVE] --json name,current,target,strategy,complete,breaking,dependency,parents,manifestHint,resolves` |
+| All apps at a glance | `st status [-S text] [--min-threat 8]` |
+| Anything else | `st api <path> [--jq expr]` (paths are relative to `api/v2/`; `{app}`/`{appId}` placeholders) |
+
+## Reading `st fix`
+
+- `target` is the version of the vulnerable component itself; `strategy` is IQ's remediation type it came from. `recommended-non-breaking*` is Sonatype's "golden version".
+- `complete: false` → the version only stops the stage failing; lower-threat violations remain. Say so when reporting.
+- `breaking: true` → major version change; expect API changes. `null` → unknown.
+- `dependency: transitive` → don't add the component directly unless there is no other way. If `parents[].target` is set, bump that parent to that version. Otherwise follow `manifestHint` (find the path, bump the parent, or pin via the ecosystem's override mechanism).
+- `available: false` (and exit 9) → IQ knows no fixed version (`error` says if the request failed). Report it; never guess a version.
