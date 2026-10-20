@@ -139,11 +139,22 @@ Needs the "Waive Policy Violations" permission in IQ Server.`,
 			}
 			req := iq.WaiverRequest{Comment: comment, ExpiryTime: expiry.Format(iq.WaiverTimeLayout), MatcherStrategy: scope}
 			out := []map[string]any{}
+			var created []string
 			for _, v := range vs {
 				if !dryRun {
 					if err := c.CreateWaiver(app.ID, v.ID, req); err != nil {
-						return fmt.Errorf("waiving %s violation of %s: %w", v.Policy, f.Name, err)
+						err = fmt.Errorf("waiving %s violation of %s: %w", v.Policy, f.Name, err)
+						if len(created) == 0 {
+							return err
+						}
+						// Earlier waivers exist now; report them so they aren't created twice.
+						if exp.enabled() {
+							_ = exp.write(stdout, out)
+						}
+						return fmt.Errorf("%w\n%d of %d waivers were created before this failure (%s); don't create them again",
+							err, len(created), len(vs), strings.Join(created, ", "))
 					}
+					created = append(created, v.Policy)
 				}
 				if exp.enabled() {
 					out = append(out, pick(map[string]any{
