@@ -21,6 +21,7 @@ type fakeIQ struct {
 	t        *testing.T
 	mu       sync.Mutex
 	requests []string
+	bodies   map[string]string // request bodies by "METHOD path"
 	srv      *httptest.Server
 	// policyDeps adds the raw report's dependency data to the policy report,
 	// as newer IQ versions do.
@@ -61,7 +62,7 @@ func secViolation(policy string, level int, waived bool, reasons ...string) map[
 	for _, r := range reasons {
 		conds = append(conds, map[string]any{"conditionSummary": "Security Vulnerability Severity >= 7", "conditionReason": r})
 	}
-	return map[string]any{"policyId": "p-" + policy, "policyName": policy, "policyThreatCategory": "SECURITY", "policyThreatLevel": level,
+	return map[string]any{"policyViolationId": fmt.Sprintf("pv-%s-%d", policy, level), "policyId": "p-" + policy, "policyName": policy, "policyThreatCategory": "SECURITY", "policyThreatLevel": level,
 		"waived": waived, "grandfathered": false, "constraints": []any{map[string]any{"constraintId": "c1", "constraintName": "cvss", "conditions": conds}}}
 }
 
@@ -168,9 +169,19 @@ func (f *fakeIQ) handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	key := r.Method + " " + r.URL.Path
+	body, _ := io.ReadAll(r.Body)
+	r.Body = io.NopCloser(bytes.NewReader(body))
 	f.mu.Lock()
 	f.requests = append(f.requests, key+"?"+r.URL.RawQuery)
+	if f.bodies == nil {
+		f.bodies = map[string]string{}
+	}
+	f.bodies[key] = string(body)
 	f.mu.Unlock()
+	if strings.HasPrefix(key, "POST /api/v2/policyWaivers/application/a1/pv-") {
+		w.WriteHeader(204)
+		return
+	}
 	apps := []any{
 		map[string]any{"id": "a1", "publicId": "my-service", "name": "My Service", "organizationId": "o1"},
 		map[string]any{"id": "a2", "publicId": "other", "name": "Other", "organizationId": "o1"},
