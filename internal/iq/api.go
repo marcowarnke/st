@@ -70,11 +70,30 @@ type ReportInfo struct {
 	ReportDataURL       string `json:"reportDataUrl"`
 }
 
-// ReportID is the last path segment of reportDataUrl
-// ("api/v2/applications/<publicId>/reports/<reportId>").
+// ReportID is the segment after "reports" in reportDataUrl. IQ Server
+// documents it as "api/v2/applications/<publicId>/reports/<reportId>/raw",
+// so the last segment is not the ID. Falls back to reportHtmlUrl
+// ("ui/links/application/<publicId>/report/<reportId>").
 func (r ReportInfo) ReportID() string {
-	u := strings.TrimRight(r.ReportDataURL, "/")
-	return u[strings.LastIndex(u, "/")+1:]
+	if id := segmentAfter(r.ReportDataURL, "reports"); id != "" {
+		return id
+	}
+	return segmentAfter(r.ReportHTMLURL, "report")
+}
+
+// segmentAfter returns the path segment following the last segment named key.
+func segmentAfter(rawURL, key string) string {
+	path := rawURL
+	if u, err := url.Parse(rawURL); err == nil {
+		path = u.Path
+	}
+	segs := strings.Split(strings.Trim(path, "/"), "/")
+	for i := len(segs) - 2; i >= 0; i-- {
+		if segs[i] == key && segs[i+1] != "" {
+			return segs[i+1]
+		}
+	}
+	return ""
 }
 
 // Reports returns the most recent report per stage, in pipeline order.

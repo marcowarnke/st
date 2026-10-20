@@ -174,7 +174,7 @@ func (f *fakeIQ) handle(w http.ResponseWriter, r *http.Request) {
 				"reportDataUrl": "api/v2/applications/my-service/reports/r2"},
 			map[string]any{"stage": "build", "applicationId": "a1", "evaluationDate": "2026-02-01T10:00:00.000-05:00",
 				"reportHtmlUrl": "ui/links/application/my-service/report/r1", "latestReportHtmlUrl": "ui/links/application/my-service/latestReport/build",
-				"reportDataUrl": "api/v2/applications/my-service/reports/r1"},
+				"reportDataUrl": "api/v2/applications/my-service/reports/r1/raw"},
 		}
 	case "GET /api/v2/reports/applications/a2":
 		out = []any{}
