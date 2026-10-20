@@ -31,7 +31,8 @@ func newStatusCmd() *cobra.Command {
 security violations in its latest report (build by default), and the
 highest threat level. Applications with findings come first.
 
-This reads two reports per application; narrow it with -S.`,
+This reads the report list and the policy report of each application
+(two requests per application); narrow it with -S.`,
 		Example: `  $ st status
   $ st status --min-threat 8 --json application,threatLevel,components`,
 		Args: cobra.NoArgs,
@@ -57,7 +58,7 @@ This reads two reports per application; narrow it with -S.`,
 				sem <- struct{}{}
 				go func() {
 					defer func() { <-sem; wg.Done() }()
-					st.scan, st.err = loadScan(c, &st.app, stage, false)
+					st.scan, st.err = loadScanWith(c, &st.app, stage, false, false)
 				}()
 			}
 			wg.Wait()
