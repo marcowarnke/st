@@ -3,7 +3,7 @@ name: st
 description: Sonatype IQ Server CLI (`st`) reference. Use for any Sonatype / IQ Server / Lifecycle question — vulnerable dependencies, CVE details, policy violations, which version fixes a component. To actually upgrade vulnerable dependencies and open a PR, use the st-upgrade skill.
 ---
 
-`st` reads Sonatype IQ Server (Lifecycle): applications, their latest scan reports, security policy violations, vulnerability details and IQ's remediation (which version to upgrade to). It never changes anything on the server and never edits files. Run `st <cmd> --help` when unsure; help texts are written for agents.
+`st` reads Sonatype IQ Server (Lifecycle): applications, their latest scan reports, security policy violations, vulnerability details and IQ's remediation (which version to upgrade to). It never edits files and changes nothing on the server, except `st waive` (see below). Run `st <cmd> --help` when unsure; help texts are written for agents.
 
 Auth is preconfigured. `st auth status` checks it; exit code 4 anywhere = not authenticated → stop and tell the user, never attempt login.
 
@@ -25,6 +25,7 @@ Auth is preconfigured. `st auth status` checks it; exit code 4 anywhere = not au
 | Is the app affected by a CVE? | `st vuln list --cve CVE-2022-42003` |
 | What a vulnerability is | `st vuln view CVE-… [--json description,recommendation,vulnerableVersionRanges,score,kev]` |
 | Which version fixes it | `st fix [PURL\|NAME\|CVE] --json name,current,target,strategy,complete,breaking,dependency,parents,manifestHint,resolves` |
+| Accept a risk (only when the user asks) | `st waive PURL --comment "why" [--expires 14d] [--dry-run]` |
 | All apps at a glance | `st status [-S text] [--min-threat 8]` |
 | Anything else | `st api <path> [--jq expr]` (paths are relative to `api/v2/`; `{app}`/`{appId}` placeholders) |
 
@@ -35,3 +36,7 @@ Auth is preconfigured. `st auth status` checks it; exit code 4 anywhere = not au
 - `breaking: true` → major version change; expect API changes. `null` → unknown.
 - `dependency: transitive` → don't add the component directly unless there is no other way. If `parents[].target` is set, bump that parent to that version. Otherwise follow `manifestHint` (find the path, bump the parent, or pin via the ecosystem's override mechanism).
 - `available: false` (and exit 9) → IQ knows no fixed version (`error` says if the request failed). Report it; never guess a version.
+
+## Waivers
+
+`st waive` hides a real vulnerability from IQ's reports. Never run it on your own initiative, and never as a substitute for an upgrade you could not make. Only when the user explicitly asks to waive a specific component: run with `--dry-run` first and show what would be waived, write the user's reason into `--comment`, and keep `--expires` as short as the reason allows (default 7d, max 90d). Exit code 1 with HTTP 403 → the user lacks the waive permission; say so.

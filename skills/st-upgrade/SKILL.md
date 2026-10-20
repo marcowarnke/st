@@ -27,7 +27,7 @@ For each component with `available: true`:
 - `dependency: transitive` without a parent target → follow `manifestHint`: find the path (`mvn dependency:tree -Dincludes=…`, `npm why …`, `go mod why …`), prefer bumping the parent to a release that pulls the fixed version; pin/override only as a last resort and say so in the PR.
 - `breaking: true` or `complete: false` → still do it, but flag it in the PR and in your report.
 
-Never invent versions: use `target` / `parents[].target` only. For `available: false`, don't change anything; report it (with `error` if set).
+Never invent versions: use `target` / `parents[].target` only. For `available: false`, don't change anything; report it (with `error` if set). Never waive (`st waive`) instead of upgrading; leave that decision to the user.
 
 ## 3. Apply and verify
 

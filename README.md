@@ -1,6 +1,6 @@
 # st — Sonatype IQ Server CLI for agents
 
-Find vulnerable dependencies in Sonatype IQ Server (Lifecycle) and the versions that fix them. Same conventions as [`bb`](https://github.com/marcowarnke/bb) and `gh`: plain output when piped, `--json`/`--jq`/`--template`, no prompts, meaningful exit codes. It only reads IQ Server and never edits files; making the upgrade is the agent's job (see the `st-upgrade` skill). Single static binary, no runtime deps.
+Find vulnerable dependencies in Sonatype IQ Server (Lifecycle) and the versions that fix them. Same conventions as [`bb`](https://github.com/marcowarnke/bb) and `gh`: plain output when piped, `--json`/`--jq`/`--template`, no prompts, meaningful exit codes. It only reads IQ Server (except `st waive`, which creates time-limited waivers) and never edits files; making the upgrade is the agent's job (see the `st-upgrade` skill). Single static binary, no runtime deps.
 
 ## Install
 
@@ -49,6 +49,7 @@ st auth status | token | logout
 | `vuln list` | Components with unwaived security policy violations in the latest report, highest threat first, with the CVE/sonatype IDs behind them, direct/transitive and the parents that pull them in. `--min-threat`, `--direct`, `--transitive`, `--cve`, `--include-waived`, `--stage`, `-L` |
 | `vuln view <id>` | CVE or sonatype ID: CVSS, CWE, CISA KEV, vulnerable version ranges, Sonatype's explanation and recommendation |
 | `fix [purl\|name\|id]` | IQ's remediation per component: target version, strategy, whether it's complete/breaking, the parent to bump for transitive deps, and a per-ecosystem `manifestHint`. Exit 9 when some components have no remediation |
+| `waive <purl\|name>` | Waive one component's unwaived security violations. `--comment` required; always expires: 7 days by default, at most 90 (`--expires 30d\|4w\|YYYY-MM-DD`); this version only unless `--all-versions`; `--policy`, `--dry-run`. Needs the "Waive Policy Violations" permission |
 | `app list` / `app view` | Applications; repository URL, base branch and latest report per stage. `view -w` opens the report |
 | `status` | Dashboard across all applications: vulnerable component count and highest threat |
 | `api` | Raw REST: `-X -f -F -H --input --jq -i`; paths are relative to `api/v2/`; `{app}` / `{appId}` placeholders |
@@ -92,7 +93,7 @@ st skills install --dir path/to/skills
 
 ## API endpoints used
 
-`api/v2/applications`, `api/v2/sourceControl/application/{id}`, `api/v2/reports/applications/{id}`, `api/v2/applications/{publicId}/reports/{reportId}/policy` and `/raw`, `api/v2/components/remediation/application/{id}`, `api/v2/vulnerabilities/{id}`. The user needs view permission on the applications. Reading source control configuration may need more on some servers; if it fails, pass `-A`.
+`api/v2/applications`, `api/v2/sourceControl/application/{id}`, `api/v2/reports/applications/{id}`, `api/v2/applications/{publicId}/reports/{reportId}/policy` and `/raw`, `api/v2/components/remediation/application/{id}`, `api/v2/vulnerabilities/{id}`; `st waive` also `POST api/v2/policyWaivers/application/{id}/{policyViolationId}`. The user needs view permission on the applications. Reading source control configuration may need more on some servers; if it fails, pass `-A`.
 
 ## Dev
 

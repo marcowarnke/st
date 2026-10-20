@@ -62,7 +62,7 @@ the target application is resolved from the git remote of the checkout.`,
   $ st status`,
 	}
 	root.SetFlagErrorFunc(flagError)
-	root.AddCommand(newAuthCmd(), newAppCmd(), newVulnCmd(), newFixCmd(), newStatusCmd(), newAPICmd(), newSkillsCmd())
+	root.AddCommand(newAuthCmd(), newAppCmd(), newVulnCmd(), newFixCmd(), newWaiveCmd(), newStatusCmd(), newAPICmd(), newSkillsCmd())
 	return root
 }
 

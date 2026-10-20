@@ -181,6 +181,7 @@ type Constraint struct {
 }
 
 type Violation struct {
+	PolicyViolationID    string       `json:"policyViolationId"`
 	PolicyID             string       `json:"policyId"`
 	PolicyName           string       `json:"policyName"`
 	PolicyThreatCategory string       `json:"policyThreatCategory"`
@@ -306,4 +307,24 @@ func (c *Client) Vulnerability(id string) (*Vulnerability, error) {
 	var v Vulnerability
 	err := c.Do("GET", "api/v2/vulnerabilities/"+url.PathEscape(id), nil, nil, &v)
 	return &v, err
+}
+
+// Waiver matcher strategies: which components a waiver covers.
+const (
+	WaiveExactComponent = "EXACT_COMPONENT" // this version only
+	WaiveAllVersions    = "ALL_VERSIONS"    // every version of the component
+)
+
+// WaiverTimeLayout is the timestamp format of the waiver API.
+const WaiverTimeLayout = "2006-01-02T15:04:05.000-0700"
+
+type WaiverRequest struct {
+	Comment         string `json:"comment"`
+	ExpiryTime      string `json:"expiryTime"`
+	MatcherStrategy string `json:"matcherStrategy"`
+}
+
+// CreateWaiver waives a policy violation at the application level.
+func (c *Client) CreateWaiver(appID, violationID string, w WaiverRequest) error {
+	return c.Do("POST", "api/v2/policyWaivers/application/"+url.PathEscape(appID)+"/"+url.PathEscape(violationID), nil, w, nil)
 }

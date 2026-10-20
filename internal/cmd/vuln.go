@@ -49,6 +49,14 @@ type finding struct {
 	Policies    []string
 	Waived      bool // every security violation is waived
 	CVEs        []cve
+	Violations  []violationRef // unwaived security violations
+}
+
+// violationRef identifies one policy violation, e.g. to waive it.
+type violationRef struct {
+	ID          string `json:"id"`
+	Policy      string `json:"policy"`
+	ThreatLevel int    `json:"threatLevel"`
 }
 
 func (f *finding) dependency() string {
@@ -161,6 +169,9 @@ func loadScan(c *session, app *iq.Application, stage string, includeWaived bool)
 				continue
 			}
 			f.ThreatLevel = max(f.ThreatLevel, v.PolicyThreatLevel)
+			if !v.Waived {
+				f.Violations = append(f.Violations, violationRef{ID: v.PolicyViolationID, Policy: v.PolicyName, ThreatLevel: v.PolicyThreatLevel})
+			}
 			if !contains(f.Policies, v.PolicyName) {
 				f.Policies = append(f.Policies, v.PolicyName)
 			}
@@ -285,7 +296,7 @@ func (f *finding) hasCVE(id string) bool {
 	return false
 }
 
-var findingFields = []string{"application", "componentIdentifier", "cves", "dependency", "direct", "format", "hash", "name", "parents", "policies", "purl", "reportUrl", "stage", "threatLevel", "version", "waived"}
+var findingFields = []string{"application", "componentIdentifier", "cves", "dependency", "direct", "format", "hash", "name", "parents", "policies", "purl", "reportUrl", "stage", "threatLevel", "version", "violations", "waived"}
 
 func findingJSON(s *scan, f *finding, fields []string) map[string]any {
 	parents := f.Parents
@@ -296,11 +307,15 @@ func findingJSON(s *scan, f *finding, fields []string) map[string]any {
 	if cves == nil {
 		cves = []cve{}
 	}
+	violations := f.Violations
+	if violations == nil {
+		violations = []violationRef{}
+	}
 	return pick(map[string]any{
 		"application": s.app.PublicID, "componentIdentifier": f.Identifier, "cves": cves, "dependency": f.dependency(),
 		"direct": f.Direct, "format": f.Format, "hash": f.Hash, "name": f.Name, "parents": parents, "policies": f.Policies,
 		"purl": f.PURL, "reportUrl": s.reportURL, "stage": s.report.Stage, "threatLevel": f.ThreatLevel, "version": f.Version,
-		"waived": f.Waived,
+		"violations": violations, "waived": f.Waived,
 	}, fields)
 }
 
