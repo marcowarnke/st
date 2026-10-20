@@ -12,6 +12,8 @@ import (
 	"testing"
 
 	"github.com/zalando/go-keyring"
+
+	"github.com/marcowarnke/st/internal/iq"
 )
 
 // fakeIQ is a tiny in-memory IQ Server with one evaluated application.
@@ -480,4 +482,13 @@ func runCLI(t *testing.T, args ...string) (string, string, int) {
 	defer func() { osArgs = old }()
 	code := Execute()
 	return o.String(), e.String(), code
+}
+
+func TestErrorHint(t *testing.T) {
+	for status, want := range map[int]string{404: "ST_DEBUG=1", 403: "permission", 429: "try again later", 503: "try again later", 400: ""} {
+		got := errorHint(fmt.Errorf("wrapped: %w", &iq.APIError{StatusCode: status}))
+		if want == "" && got != "" || !strings.Contains(got, want) {
+			t.Errorf("errorHint(%d) = %q, want it to contain %q", status, got, want)
+		}
+	}
 }

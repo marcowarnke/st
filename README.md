@@ -14,6 +14,10 @@ make dist                    # → dist/st_<os>_<arch>
 
 CI (`.github/workflows/build.yml`) tests and builds on every push; pushing a `v*` tag publishes a release with the binaries.
 
+## Retries and errors
+
+Requests that hit HTTP 429 or 503 are retried (any method), as are other 5xx responses and network errors for GET/PUT/DELETE: up to 3 retries with exponential backoff (0.5s, 1s, 2s + jitter), honoring `Retry-After`. POSTs are not retried on 500/502/504 since they may have taken effect. Errors for 403/404/429/5xx come with a hint; `ST_DEBUG=1` shows exactly which request failed.
+
 ## Auth
 
 IQ Server uses HTTP Basic auth. Use a user token (user menu → User Token): a code/passcode pair. A username and password work the same way.
@@ -36,6 +40,7 @@ st auth status | token | logout
 | `ST_HOST` | Host or base URL; needed when more than one host is configured |
 | `ST_APP` | Default application public ID (same as `-A`) |
 | `ST_CONFIG_DIR`, `XDG_CONFIG_HOME` | Config location |
+| `ST_DEBUG` | Log every request (method, URL, status, duration) and retry to stderr |
 | `NO_COLOR`, `BROWSER` | As in gh |
 
 ## Application resolution
