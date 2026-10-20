@@ -19,7 +19,7 @@ func TestSkillsReferenceRealFlags(t *testing.T) {
 	if len(files) < 2 {
 		t.Fatalf("expected skill files, found %v", files)
 	}
-	invocation := regexp.MustCompile("\\bst ((?:app|vuln|fix|status|auth|api|skills)\\b[^`|\\n]*)")
+	invocation := regexp.MustCompile("\\bst ((?:app|vuln|fix|waive|status|auth|api|skills)\\b[^`|\\n]*)")
 	flag := regexp.MustCompile(`(?:^|[\s\[])(--?[a-zA-Z][\w-]*)`)
 	jsonFields := regexp.MustCompile(`--json ([\w,]+)`)
 	checked := 0

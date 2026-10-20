@@ -3,7 +3,7 @@ name: st-upgrade
 description: Upgrade dependencies that Sonatype IQ Server reports as vulnerable, verify the build, and open a pull request. Use when asked to fix vulnerabilities, remediate Sonatype / IQ findings, or bump vulnerable dependencies in a repository.
 ---
 
-Loop: find what's vulnerable → get IQ's target versions → edit the manifests → build and test → commit → open a PR → report. `st` only reads IQ Server; you make the changes. See the `st` skill for command details.
+Loop: find what's vulnerable → get IQ's target versions → edit the manifests → build and test → commit → open a PR → report. `st` only reads IQ Server here; you make the changes. See the `st` skill for command details.
 
 ## 1. Scope
 
@@ -27,7 +27,7 @@ For each component with `available: true`:
 - `dependency: transitive` without a parent target → follow `manifestHint`: find the path (`mvn dependency:tree -Dincludes=…`, `npm why …`, `go mod why …`), prefer bumping the parent to a release that pulls the fixed version; pin/override only as a last resort and say so in the PR.
 - `breaking: true` or `complete: false` → still do it, but flag it in the PR and in your report.
 
-Never invent versions: use `target` / `parents[].target` only. For `available: false`, don't change anything; report it (with `error` if set). Never waive (`st waive`) instead of upgrading; leave that decision to the user.
+Never invent versions: use `target` / `parents[].target` only. For `available: false`, don't change anything; report it (with `error` if set). Never waive (`st waive`) instead of upgrading: list what couldn't be fixed and leave the decision to waive to the user (the `st` skill covers how).
 
 ## 3. Apply and verify
 
