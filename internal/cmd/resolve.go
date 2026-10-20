@@ -40,7 +40,16 @@ func clientFor(host string) (*session, error) {
 	if err != nil {
 		return nil, &ExitError{Code: exitAuth, Err: err}
 	}
-	return &session{iq.New(h.BaseURL, h.User, h.Token), key}, nil
+	return &session{newIQ(h.BaseURL, h.User, h.Token), key}, nil
+}
+
+// newIQ creates a client; ST_DEBUG=1 logs every request to stderr.
+func newIQ(baseURL, user, password string) *iq.Client {
+	c := iq.New(baseURL, user, password)
+	if os.Getenv("ST_DEBUG") != "" {
+		c.Debug = stderr
+	}
+	return c
 }
 
 // addAppFlag registers -A/--app with completion of application public IDs.

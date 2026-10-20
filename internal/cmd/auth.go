@@ -101,7 +101,7 @@ With --with-token, standard input is read as "code:passcode".`,
 			if user == "" || pass == "" {
 				return errors.New("no token provided")
 			}
-			if err := verifyLogin(iq.New(base, user, pass)); err != nil {
+			if err := verifyLogin(newIQ(base, user, pass)); err != nil {
 				return fmt.Errorf("validating token against %s: %w", base, err)
 			}
 			cfg, err := config.Load()
@@ -169,7 +169,7 @@ func newAuthStatusCmd() *cobra.Command {
 					failed = true
 					continue
 				}
-				if err := verifyLogin(iq.New(h.BaseURL, h.User, h.Token)); err != nil {
+				if err := verifyLogin(newIQ(h.BaseURL, h.User, h.Token)); err != nil {
 					fmt.Fprintf(stdout, "  %s Failed to log in to %s using token (%s): %v\n", red("X"), key, h.TokenSource, err)
 					failed = true
 					continue

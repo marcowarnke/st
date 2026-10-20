@@ -91,7 +91,28 @@ func Execute() int {
 	if errors.As(err, &api) && api.StatusCode == 401 || errors.Is(err, config.ErrNoHost) {
 		return exitAuth
 	}
+	if hint := errorHint(err); hint != "" {
+		fmt.Fprintln(stderr, hint)
+	}
 	return 1
+}
+
+// errorHint suggests a next step for API errors that are not self-explanatory.
+func errorHint(err error) string {
+	var api *iq.APIError
+	if !errors.As(err, &api) {
+		return ""
+	}
+	switch {
+	case api.StatusCode == 403:
+		return "hint: the user lacks permission for this request in IQ Server; ask an IQ administrator"
+	case api.StatusCode == 404:
+		return "hint: IQ Server has no such resource, or the endpoint does not exist in this IQ version. " +
+			"Check the application and its reports with `st app view`; rerun with ST_DEBUG=1 to see every request"
+	case api.StatusCode == 429 || api.StatusCode >= 500:
+		return "hint: IQ Server is overloaded or failing; try again later, or narrow the request (e.g. `st status -S text`)"
+	}
+	return ""
 }
 
 // flagError mirrors gh: `--json` without a value lists the available fields.
