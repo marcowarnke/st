@@ -65,7 +65,16 @@ if (Get-Command uv -ErrorAction SilentlyContinue) {{
     $exe = 'py'
     $pre = @('-3', $pyz)
 }}
-if ($MyInvocation.ExpectingInput) {{ $input | & $exe @pre @args }} else {{ & $exe @pre @args }}
+$argv = $args
+if ($PSVersionTable.PSVersion.Major -lt 7) {{
+    # Windows PowerShell drops embedded double quotes when it calls a program: escape them as \\" (C runtime rules).
+    $argv = @($args | ForEach-Object {{
+        $a = [string]$_ -replace '(\\\\*)"', '$1$1\\"'
+        if ($a -match '\\s') {{ $a -replace '(\\\\+)$', '$1$1' }} else {{ $a }}
+    }})
+}}
+$OutputEncoding = New-Object System.Text.UTF8Encoding $false  # pipe UTF-8 without a byte order mark
+if ($MyInvocation.ExpectingInput) {{ $input | & $exe @pre @argv }} else {{ & $exe @pre @argv }}
 exit $LASTEXITCODE
 """
 

@@ -93,3 +93,12 @@ def test_macos_quoting_matches_go_shellescape():
     assert credstore._shellquote("st:iq.corp") == "st:iq.corp"
     assert credstore._shellquote("it's") == "'it'\"'\"'s'"
     assert credstore._shellquote("") == "''"
+
+
+def test_read_stdin_drops_byte_order_mark():
+    old = output.io.stdin
+    output.io.stdin = __import__("io").StringIO("﻿code:pass\n")
+    try:
+        assert output.read_stdin() == "code:pass\n"
+    finally:
+        output.io.stdin = old

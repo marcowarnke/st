@@ -76,7 +76,8 @@ def err(s: str = "", end: str = "\n") -> None:
 
 
 def read_stdin() -> str:
-    return io.stdin.read()
+    # Windows PowerShell 5.1 can prepend a byte order mark when piping into a program.
+    return io.stdin.read().removeprefix("\ufeff")
 
 
 def color_on() -> bool:
