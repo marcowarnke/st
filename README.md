@@ -1,18 +1,50 @@
 # st — Sonatype IQ Server CLI for agents
 
-Find vulnerable dependencies in Sonatype IQ Server (Lifecycle) and the versions that fix them. Same conventions as [`bb`](https://github.com/marcowarnke/bb) and `gh`: plain output when piped, `--json`/`--jq`/`--template`, no prompts, meaningful exit codes. It only reads IQ Server (except `st waive`, which creates time-limited waivers) and never edits files; making the upgrade is the agent's job (see the `st-upgrade` skill). Single static binary, no runtime deps.
+Find vulnerable dependencies in Sonatype IQ Server (Lifecycle) and the versions that fix them. Same conventions as [`bb`](https://github.com/marcowarnke/bb) and `gh`: plain output when piped, `--json`/`--jq`/`--format`, no prompts, meaningful exit codes. It only reads IQ Server (except `st waive`, which creates time-limited waivers) and never edits files; making the upgrade is the agent's job (see the `st-upgrade` skill). Plain Python (3.10+, standard library plus truststore), shipped as a single zip app with launchers, so there is no binary for endpoint policies to flag.
 
 ## Install
 
-Download a binary from [Releases](https://github.com/marcowarnke/st/releases) (windows/amd64, linux/amd64, darwin/arm64), or:
+Needs [uv](https://docs.astral.sh/uv/) (recommended: it also provides Python) or Python 3.10+. `--jq` needs the [jq](https://jqlang.org/download/) command; without it, use `--format`.
+
+1. Download `st-v0.3.0.zip` from [Releases](https://github.com/marcowarnke/st/releases) and unpack it. The `st` folder holds:
+
+   | File | What |
+   |---|---|
+   | `st.pyz` | The whole CLI as one Python zip app |
+   | `st.cmd` | Launcher for cmd.exe (and PowerShell) on Windows |
+   | `st.ps1` | Launcher for PowerShell on Windows |
+   | `st` | Launcher for macOS/Linux shells and Git Bash |
+
+2. Put the folder on your `PATH` and check with `st --version`:
+
+   ```powershell
+   # Windows (PowerShell), for the current user
+   $dir = "$HOME\bin\st"   # where you unpacked it
+   [Environment]::SetEnvironmentVariable("Path", [Environment]::GetEnvironmentVariable("Path", "User") + ";$dir", "User")
+   ```
+
+   ```sh
+   # macOS/Linux
+   ln -s "$PWD/st/st" ~/.local/bin/st
+   ```
+
+The launchers run `st.pyz` through `uv run` when uv is installed (uv finds or downloads a suitable Python), otherwise with `python3`/`python` (or `py -3` on Windows) from `PATH`. No executable is installed.
+
+On Windows, PowerShell prefers `st.ps1` over `st.cmd`. If PowerShell says running scripts is disabled (execution policy), delete `st.ps1` and `st.cmd` takes over.
+
+Alternatively, install it as a uv tool. On Windows this creates a small `st.exe` shim, which endpoint policies may block like the old binaries:
 
 ```sh
-go install github.com/marcowarnke/st@latest
-make install                 # from a checkout, with version stamp
-make dist                    # → dist/st_<os>_<arch>
+uv tool install git+https://github.com/marcowarnke/st@v0.3.0
 ```
 
-CI (`.github/workflows/build.yml`) tests and builds on every push; pushing a `v*` tag publishes a release with the binaries.
+TLS: `st` trusts the operating system's certificate store (through [truststore](https://github.com/sethmlarson/truststore)), so corporate TLS inspection works without setup; `SSL_CERT_FILE` overrides it. For uv itself (downloading Python behind such a proxy), set `UV_SYSTEM_CERTS=1`.
+
+### Upgrading from the Go binaries
+
+Delete the old `st` executable and install as above. Logins carry over: keyring entries and `config.json` are read and written exactly as before (CI checks the keyring format against go-keyring on every OS). Re-run `st skills install` afterwards.
+
+The command line is unchanged, except that Go's `--template` is replaced by `--format`, a Python format string applied to each item (`--json name,version --format '{name}@{version}'`).
 
 ## Retries and errors
 
@@ -58,7 +90,7 @@ st auth status | token | logout
 | `app list` / `app view` | Applications; repository URL, base branch and latest report per stage. `view -w` opens the report |
 | `status` | Dashboard across all applications: vulnerable component count and highest threat |
 | `api` | Raw REST: `-X -f -F -H --input --jq -i`; paths are relative to `api/v2/`; `{app}` / `{appId}` placeholders |
-| `skills install` / `list` | Agent skills, embedded in the binary |
+| `skills install` / `list` | Agent skills, embedded in `st.pyz` |
 
 Reports: the build stage by default, else the most recently evaluated; `--stage develop|source|build|stage-release|release|operate`. Findings are only as fresh as the last scan.
 
@@ -83,7 +115,7 @@ st fix pkg:maven/org.yaml/snakeyaml --strategy next-no-violations
 
 ## Agent usage
 
-Non-TTY output is tab-separated/plain, without color or prompts. Prefer `--json` + `--jq`; `--json` alone lists the available fields. Exit codes: 0 ok, 1 error, 4 auth, 9 no remediation for some components.
+Non-TTY output is tab-separated/plain, without color or prompts. Prefer `--json` + `--jq` (`--jq` runs the `jq` command; without it use `--format '{name}\t{version}'`, a Python format string applied to each item); `--json` alone lists the available fields. Shell completion: `st completion bash|zsh|fish|powershell`. Exit codes: 0 ok, 1 error, 4 auth, 9 no remediation for some components.
 
 | Skill | Loop |
 |---|---|
@@ -102,4 +134,13 @@ st skills install --dir path/to/skills
 
 ## Dev
 
-`make test`: the command tests run against an in-process fake IQ Server (`internal/cmd/cmd_test.go`). `TestSkillsReferenceRealFlags` checks that every `st …` line in the skills uses real commands, flags and `--json` fields.
+```sh
+uv sync                                     # environment with the dev tools
+uv run st --help                            # run from the checkout
+uv run pytest                               # tests (need jq)
+uv run ruff check && uv run ruff format --check
+uv run python scripts/build.py              # → dist/: st.pyz, st.cmd, st.ps1, st, st-vX.Y.Z.zip
+uv run python scripts/verify_artifact.py    # run the built launchers against a fake server
+```
+
+CI (`.github/workflows/build.yml`) runs on every push: lint, tests on Linux, macOS and Windows with Python 3.10 and 3.13, a keyring check against go-keyring, the build, and the built launchers on every OS with and without uv. Pushing a `v*` tag that matches the version in `pyproject.toml` publishes a release with the files.

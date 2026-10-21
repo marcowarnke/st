@@ -1,7 +1,9 @@
 name: build
 
-# Every push/PR: test + build, binaries exported as a workflow artifact.
-# Tags v*: binaries are also attached to a GitHub release.
+# Every push/PR: lint and test on Linux, macOS and Windows (Python 3.10 and
+# 3.13), check keyring compatibility with the Go releases, build the release
+# files, then run the built launchers on every OS (with uv, and without it).
+# Tags v*: the files are attached to a GitHub release.
 on:
   push:
     branches: [main]
@@ -12,23 +14,142 @@ on:
 permissions:
   contents: write
 
+env:
+  APP: st
+
 jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ["3.10", "3.13"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.python }}
+      - run: jq --version # --jq runs the jq command; the tests use it
+      - if: matrix.os == 'ubuntu-latest' && matrix.python == '3.13'
+        run: |
+          uv run --locked ruff check
+          uv run --locked ruff format --check
+      - run: uv run --locked pytest
+
+  keyring-compat:
+    # Logins made with the Go releases (zalando/go-keyring) must keep working.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: false
+      - name: Build a go-keyring helper (the version the Go releases used)
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/gk" && cd "$RUNNER_TEMP/gk"
+          cat > main.go <<'EOF'
+          package main
+
+          import (
+          	"fmt"
+          	"os"
+
+          	"github.com/zalando/go-keyring"
+          )
+
+          func main() {
+          	var err error
+          	switch os.Args[1] {
+          	case "set":
+          		err = keyring.Set(os.Args[2], os.Args[3], os.Args[4])
+          	case "get":
+          		var v string
+          		if v, err = keyring.Get(os.Args[2], os.Args[3]); err == nil {
+          			fmt.Print(v)
+          		}
+          	case "delete":
+          		err = keyring.Delete(os.Args[2], os.Args[3])
+          	}
+          	if err != nil {
+          		fmt.Fprintln(os.Stderr, err)
+          		os.Exit(1)
+          	}
+          }
+          EOF
+          go mod init gk
+          go get github.com/zalando/go-keyring@v0.2.8
+          go build -o "gk$(go env GOEXE)" .
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update -q && sudo apt-get install -y -q gnome-keyring libsecret-tools dbus-x11
+      - name: Go and Python read each other's keyring entries
+        shell: bash
+        run: |
+          helper="$RUNNER_TEMP/gk/gk$(go env GOEXE)"
+          uv sync --locked
+          if [ "$RUNNER_OS" = Linux ]; then
+            dbus-run-session -- sh -c "printf ci-password | gnome-keyring-daemon --unlock --components=secrets >/dev/null && uv run --locked python scripts/keyring_compat.py '$helper'"
+          else
+            uv run --locked python scripts/keyring_compat.py "$helper"
+          fi
+
   build:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # git describe for the version stamp
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-      - run: go test ./...
-      - run: make dist # windows/amd64, linux/amd64, darwin/arm64
+      - uses: astral-sh/setup-uv@v6
+      - if: startsWith(github.ref, 'refs/tags/v')
+        name: The tag must match the version
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"$/\1/p' pyproject.toml)
+          test "$GITHUB_REF_NAME" = "v$version" || { echo "tag $GITHUB_REF_NAME does not match version $version in pyproject.toml"; exit 1; }
+      - run: uv run --locked python scripts/build.py
       - uses: actions/upload-artifact@v4
         with:
-          name: st-binaries
+          name: ${{ env.APP }}-dist
           path: dist/*
-      - if: startsWith(github.ref, 'refs/tags/v')
-        run: gh release create "$GITHUB_REF_NAME" dist/* --generate-notes
+          if-no-files-found: error
+
+  verify:
+    # Run the built launchers (.cmd, .ps1, sh, .pyz) on every OS against a fake server.
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: [uv, "3.10"] # uv: launchers go through uv; 3.10: uv hidden, the Python on PATH runs the .pyz
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        if: matrix.python != 'uv'
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.APP }}-dist
+          path: dist
+      - shell: bash
+        run: uv run --locked python scripts/verify_artifact.py dist ${{ matrix.python != 'uv' && '--no-uv' || '' }}
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [verify, keyring-compat]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.APP }}-dist
+          path: dist
+      - run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --generate-notes
         env:
           GH_TOKEN: ${{ github.token }}
