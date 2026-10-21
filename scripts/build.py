@@ -106,7 +106,7 @@ def vendor(dist_name: str, dest: Path) -> None:
 
 
 def main() -> int:
-    project = (ROOT / "pyproject.toml").read_text()
+    project = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     app = re.search(r'^name = "(.+)"$', project, re.M).group(1)
     version = re.search(r'^version = "(.+)"$', project, re.M).group(1)
     sys.path.insert(0, str(ROOT / "src"))
@@ -118,7 +118,7 @@ def main() -> int:
     stage = DIST / "stage"
     shutil.copytree(ROOT / "src" / app, stage / app, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     vendor("truststore", stage)
-    (stage / "__main__.py").write_text(MAIN.format(app=app))
+    (stage / "__main__.py").write_text(MAIN.format(app=app), encoding="utf-8")
     pyz = DIST / f"{app}.pyz"
     zipapp.create_archive(stage, pyz, interpreter="/usr/bin/env python3", compressed=True)
     shutil.rmtree(stage)
@@ -126,7 +126,7 @@ def main() -> int:
     (DIST / f"{app}.cmd").write_bytes(CMD.format(app=app).replace("\n", "\r\n").encode())
     (DIST / f"{app}.ps1").write_bytes(PS1.format(app=app).replace("\n", "\r\n").encode())
     sh = DIST / app
-    sh.write_text(SH.format(app=app), newline="\n")
+    sh.write_text(SH.format(app=app), newline="\n", encoding="utf-8")
     sh.chmod(sh.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
     bundle = DIST / f"{app}-v{version}.zip"

@@ -102,12 +102,13 @@ def verify(r: Runner, fake: FakeIQ, version: str, jq: bool) -> None:
 
 
 def main() -> int:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # Windows pipes default to cp1252
     ap = argparse.ArgumentParser()
     ap.add_argument("dist", nargs="?", default=str(ROOT / "dist"))
     ap.add_argument("--no-uv", action="store_true")
     opts = ap.parse_args()
     dist = Path(opts.dist).resolve()
-    version = re.search(r'^version = "(.+)"$', (ROOT / "pyproject.toml").read_text(), re.M).group(1)
+    version = re.search(r'^version = "(.+)"$', (ROOT / "pyproject.toml").read_text(encoding="utf-8"), re.M).group(1)
     if os.name != "nt":
         (dist / APP).chmod(0o755)
     env = {k: v for k, v in os.environ.items() if not k.startswith("ST_") and k != "NO_COLOR"}

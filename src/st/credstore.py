@@ -152,7 +152,9 @@ class _MacOS:
     HEX = "go-keyring-encoded:"
 
     def get(self, service: str, user: str) -> str:
-        p = subprocess.run([self.SECURITY, "find-generic-password", "-s", service, "-wa", user], capture_output=True, text=True)
+        p = subprocess.run(
+            [self.SECURITY, "find-generic-password", "-s", service, "-wa", user], capture_output=True, text=True, encoding="utf-8"
+        )
         if p.returncode != 0:
             if "could not be found" in p.stdout + p.stderr:
                 raise NotFound()
@@ -170,12 +172,14 @@ class _MacOS:
         if len(command) > 4096:
             raise ValueError("data passed to Set was too big")
         # -i reads the command from stdin, so the secret never shows up in the process list.
-        p = subprocess.run([self.SECURITY, "-i"], input=command, capture_output=True, text=True)
+        p = subprocess.run([self.SECURITY, "-i"], input=command, capture_output=True, text=True, encoding="utf-8")
         if p.returncode != 0:
             raise OSError((p.stderr or p.stdout).strip() or f"security exited with status {p.returncode}")
 
     def delete(self, service: str, user: str) -> None:
-        p = subprocess.run([self.SECURITY, "delete-generic-password", "-s", service, "-a", user], capture_output=True, text=True)
+        p = subprocess.run(
+            [self.SECURITY, "delete-generic-password", "-s", service, "-a", user], capture_output=True, text=True, encoding="utf-8"
+        )
         if "could not be found" in p.stdout + p.stderr:
             raise NotFound()
         if p.returncode != 0:

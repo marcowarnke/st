@@ -19,11 +19,12 @@ from st import credstore  # noqa: E402
 
 
 def main() -> int:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # Windows pipes default to cp1252
     helper = sys.argv[1]
     service, user = f"st:compat-{uuid.uuid4().hex[:8]}.example", "code"
 
     def go(*args: str) -> subprocess.CompletedProcess:
-        return subprocess.run([helper, *args], capture_output=True, text=True, timeout=30)
+        return subprocess.run([helper, *args], capture_output=True, text=True, encoding="utf-8", timeout=30)
 
     try:
         p = go("set", service, user, "secret-from-go ✓")

@@ -18,7 +18,7 @@ pytestmark = pytest.mark.jq
 
 
 def config_file() -> str:
-    return config.path().read_text()
+    return config.path().read_text(encoding="utf-8")
 
 
 def test_auth_login_keyring(fake, monkeypatch):
@@ -63,7 +63,7 @@ def test_config_compatible_with_go(fake, monkeypatch):
     monkeypatch.setenv("ST_TOKEN", "")
     monkeypatch.setenv("ST_HOST", "")
     config.config_dir().mkdir(parents=True)
-    config.path().write_text(json.dumps({"hosts": {"127.0.0.1": {"base_url": fake.url, "user": "code"}}}))
+    config.path().write_text(json.dumps({"hosts": {"127.0.0.1": {"base_url": fake.url, "user": "code"}}}), encoding="utf-8")
     credstore.set("st:127.0.0.1", "code", "pass")
     out, err, code = run("app", "list")
     assert code == 0 and out.startswith("my-service"), err
@@ -95,7 +95,7 @@ def test_app_from_git_remote(fake, tmp_path, monkeypatch):
     out, err, code = run("vuln", "list", "--json", "application", "--jq", ".[0].application")
     assert code == 0 and out == "my-service\n", err
     assert fake.count("GET /api/v2/sourceControl/") == 2  # one lookup per app
-    assert '"proj/my-service": "my-service"' in (config.config_dir() / "apps.json").read_text()
+    assert '"proj/my-service": "my-service"' in (config.config_dir() / "apps.json").read_text(encoding="utf-8")
     # Second run uses the cache.
     assert run("app", "view", "--json", "publicId")[2] == 0
     assert fake.count("GET /api/v2/sourceControl/") == 3  # +1 from app view's own repository lookup

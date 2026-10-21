@@ -51,7 +51,7 @@ def run_tty(*args: str, stdin: str = "") -> tuple[str, str, int]:
 
 
 def jq(data: str, expr: str) -> str:
-    return subprocess.run(["jq", "-r", expr], input=data, capture_output=True, text=True, check=True).stdout.strip()
+    return subprocess.run(["jq", "-r", expr], input=data, capture_output=True, text=True, encoding="utf-8", check=True).stdout.strip()
 
 
 def pytest_collection_modifyitems(config: Any, items: list) -> None:
