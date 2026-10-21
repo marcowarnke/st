@@ -74,7 +74,7 @@ class Runner:
         elif self.mode == "ps":  # stdin comes from a PowerShell pipeline, as a user would write it
             line = " ".join([APP, *(ps_quote(a) for a in args)])
             if stdin:
-                line = ps_quote(stdin.rstrip("\n")) + " | " + line
+                line = "'" + stdin.rstrip("\n").replace("'", "''") + "' | " + line  # a string, never a command
             p = subprocess.run(self.prefix + [line + "; exit $LASTEXITCODE"], stdin=subprocess.DEVNULL, capture_output=True, env=env)
         else:
             p = subprocess.run(self.prefix + list(args), input=stdin.encode(), capture_output=True, env=env)
