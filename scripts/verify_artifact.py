@@ -26,22 +26,24 @@ from fakes import FakeIQ  # noqa: E402
 APP = "st"
 
 
-def launchers(dist: Path) -> list[tuple[str, list[str], bool]]:
-    """(name, command prefix, typed at a cmd.exe prompt) for every way this OS runs the CLI."""
+def launchers(dist: Path) -> list[tuple[str, list[str], str]]:
+    """(name, command prefix, mode) for every way this OS runs the CLI. Modes: argv
+    (run the prefix with the arguments), cmd (typed at a cmd.exe prompt), ps (typed
+    at a PowerShell prompt); the last two find the launcher on PATH."""
     out = []
     if os.name == "nt":
-        out.append(("cmd (direct)", [str(dist / f"{APP}.cmd")], False))
-        out.append(("cmd (on PATH)", [], True))
+        out.append(("cmd (direct)", [str(dist / f"{APP}.cmd")], "argv"))
+        out.append(("cmd (on PATH)", [], "cmd"))
         for ps in ("powershell", "pwsh"):
             exe = shutil.which(ps)
             if exe:
-                out.append((f"{ps} .ps1", [exe, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(dist / f"{APP}.ps1")], False))
+                out.append((f"{ps} (on PATH, .ps1)", [exe, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command"], "ps"))
         sh = shutil.which("sh")
         if sh:
-            out.append(("sh (Git Bash)", [sh, str(dist / APP)], False))
+            out.append(("sh (Git Bash)", [sh, str(dist / APP)], "argv"))
     else:
-        out.append(("sh", [str(dist / APP)], False))
-    out.append(("pyz", [sys.executable, str(dist / f"{APP}.pyz")], False))
+        out.append(("sh", [str(dist / APP)], "argv"))
+    out.append(("pyz", [sys.executable, str(dist / f"{APP}.pyz")], "argv"))
     return out
 
 
@@ -52,16 +54,28 @@ def cmd_quote(a: str) -> str:
     return '"' + a.replace('"', '\\"') + '"'
 
 
+def ps_quote(a: str) -> str:
+    """Quote one argument the way a person types it in PowerShell (a,b stays unquoted)."""
+    if re.fullmatch(r"[A-Za-z0-9_./:=,+-][A-Za-z0-9_./:@=,+-]*", a):
+        return a
+    return "'" + a.replace("'", "''") + "'"
+
+
 class Runner:
-    def __init__(self, prefix: list[str], typed: bool, env: dict[str, str]):
-        self.prefix, self.typed, self.env = prefix, typed, env
+    def __init__(self, prefix: list[str], mode: str, env: dict[str, str]):
+        self.prefix, self.mode, self.env = prefix, mode, env
         self.results: list[tuple[str, bool, object]] = []
 
     def run(self, *args: str, stdin: str = "", extra: dict | None = None) -> tuple[str, str, int]:
         env = dict(self.env, **(extra or {}))
-        if self.typed:  # typed at a cmd.exe prompt, the launcher found on PATH
+        if self.mode == "cmd":
             line = " ".join([APP, *(cmd_quote(a) for a in args)])
             p = subprocess.run(f'cmd /d /s /c "{line}"', input=stdin.encode(), capture_output=True, env=env)
+        elif self.mode == "ps":  # stdin comes from a PowerShell pipeline, as a user would write it
+            line = " ".join([APP, *(ps_quote(a) for a in args)])
+            if stdin:
+                line = ps_quote(stdin.rstrip("\n")) + " | " + line
+            p = subprocess.run(self.prefix + [line + "; exit $LASTEXITCODE"], stdin=subprocess.DEVNULL, capture_output=True, env=env)
         else:
             p = subprocess.run(self.prefix + list(args), input=stdin.encode(), capture_output=True, env=env)
 
@@ -120,12 +134,12 @@ def main() -> int:
     jq = shutil.which("jq", path=env["PATH"]) is not None
 
     failures = 0
-    for name, prefix, typed in launchers(dist):
+    for name, prefix, mode in launchers(dist):
         fake = FakeIQ()
         tmp = tempfile.mkdtemp()
-        r = Runner(prefix, typed, dict(env, ST_CONFIG_DIR=tmp, ST_HOST=fake.url, ST_TOKEN="code:pass", HOME=tmp, USERPROFILE=tmp))
+        r = Runner(prefix, mode, dict(env, ST_CONFIG_DIR=tmp, ST_HOST=fake.url, ST_TOKEN="code:pass", HOME=tmp, USERPROFILE=tmp))
         verify(r, fake, version, jq)
-        if name.endswith(".ps1"):
+        if mode == "ps":
             # The PowerShell completion script, through the launcher on PATH.
             matches = f"(TabExpansion2 -inputScript '{APP} vu' -cursorColumn 5).CompletionMatches"
             script = f"{APP} completion powershell | Out-String | Invoke-Expression; {matches} | ForEach-Object {{ $_.CompletionText }}"
